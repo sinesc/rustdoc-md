@@ -151,16 +151,16 @@ class DocGenerator {
     }
 
     /**
-     * Shift markdown headings down by 3 levels so doc-comment headings nest under item headings.
-     * e.g. `# Error` -> `### Error`, `## Examples` -> `##### Examples`.
+     * Shift markdown headings down by $depth levels so doc-comment headings nest properly.
      */
-    private function shiftHeadings(string $docs): string {
-        return preg_replace('/^([#]{1,6})\s/m', '###$1 ', $docs);
+    private function shiftHeadings(string $docs, int $depth = 1): string {
+        $prefix = str_repeat('#', $depth);
+        return preg_replace('/^([#]{1,6})\s/m', "$prefix$1 ", $docs);
     }
 
-    private function resolveDocLinks(string $docs, array $links): string {
+    private function resolveDocLinks(string $docs, array $links, int $depth = 1): string {
         $docs = $this->hideBoilerplate($docs);
-        $docs = $this->shiftHeadings($docs);
+        $docs = $this->shiftHeadings($docs, $depth);
         if (empty($links)) return $docs;
         foreach ($links as $label => $id) {
             $link = $this->idToLink((int)$id);
@@ -691,7 +691,7 @@ class DocGenerator {
                 if (!$field) continue;
                 $fname = $field['name'] ?? 'unnamed';
                 $ftype = $this->renderTypeName($field['inner']['struct_field'] ?? null);
-                $fdocs = $this->resolveDocLinks($field['docs'] ?? '', $field['links'] ?? []);
+                $fdocs = $this->resolveDocLinks($field['docs'] ?? '', $field['links'] ?? [], 3);
                 $lines[] = "### `$fname: $ftype`";
                 $lines[] = '';
                 if ($fdocs) { $lines[] = $fdocs; $lines[] = ''; }
@@ -827,7 +827,7 @@ class DocGenerator {
         $lines[] = '';
 
         // Docs
-        $docs = $this->resolveDocLinks($method['docs'] ?? '', $method['links'] ?? []);
+        $docs = $this->resolveDocLinks($method['docs'] ?? '', $method['links'] ?? [], 3);
         if ($docs) { $lines[] = $docs; $lines[] = ''; }
     }
 
@@ -928,7 +928,7 @@ class DocGenerator {
                 $var = $this->index[(string)$varId] ?? null;
                 if (!$var) continue;
                 $vname = $var['name'] ?? 'unnamed';
-                $vdocs = $this->resolveDocLinks($var['docs'] ?? '', $var['links'] ?? []);
+                $vdocs = $this->resolveDocLinks($var['docs'] ?? '', $var['links'] ?? [], 3);
                 $lines[] = "### `$vname`";
                 $lines[] = '';
                 if ($vdocs) { $lines[] = $vdocs; $lines[] = ''; }
@@ -1057,7 +1057,7 @@ class DocGenerator {
     private function renderTraitItem(array $assoc, array &$lines): void {
         $atype = $this->getItemType($assoc);
         $aname = $assoc['name'] ?? 'unnamed';
-        $docs = $this->resolveDocLinks($assoc['docs'] ?? '', $assoc['links'] ?? []);
+        $docs = $this->resolveDocLinks($assoc['docs'] ?? '', $assoc['links'] ?? [], 3);
 
         if ($atype === 'function') {
             $this->renderMethodDetails($assoc, $lines);
