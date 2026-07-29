@@ -394,13 +394,13 @@ class DocGenerator {
     // ---- Summary table ----
 
     /**
-     * Render a markdown table: | Item | Description |
+     * Render a markdown table: Item | Description
      */
     private function appendTable(array $items, array &$lines): void {
         // Sort items alphabetically by name
         usort($items, fn($a, $b) => ($a['name'] ?? '') <=> ($b['name'] ?? ''));
-        $lines[] = '| Item | Description |';
-        $lines[] = '|------|-------------|';
+        $lines[] = 'Item | Description';
+        $lines[] = '-|-';
         foreach ($items as $item) {
             // Skip items registered in a sibling/descendant module (not current or ancestor)
             $itemPath = $this->itemPaths[$item['id']] ?? '';
@@ -419,11 +419,11 @@ class DocGenerator {
             if ($type === 'module') {
                 $modLink = $name . '/index.md';
                 $desc = $this->getFirstLineOfDocs($item);
-                $lines[] = "| [$name]($modLink) | $desc |";
+                $lines[] = "[$name]($modLink) | $desc";
             } else {
                 $depr = $item['deprecation'] ? ' *~~deprecated~~*' : '';
                 $desc = $this->getFirstLineOfDocs($item);
-                $lines[] = "| [$name]($link)$depr | $desc |";
+                $lines[] = "[$name]($link)$depr | $desc";
             }
         }
     }
