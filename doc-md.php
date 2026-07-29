@@ -151,6 +151,13 @@ class DocGenerator {
     }
 
     /**
+     * Wrap doc lines as a block quote (prefix each line with "> ").
+     */
+    private function asBlockQuote(string $docs): string {
+        return preg_replace('/^/m', '> ', $docs);
+    }
+
+    /**
      * Shift markdown headings down by $depth levels so doc-comment headings nest properly.
      */
     private function shiftHeadings(string $docs, int $depth = 1): string {
@@ -353,7 +360,7 @@ class DocGenerator {
 
         $lines[] = "# {$this->crateName} v{$this->crateVersion}";
         $lines[] = '';
-        if ($docs) { $lines[] = $docs; $lines[] = ''; }
+        if ($docs) { $lines[] = $this->asBlockQuote($docs); $lines[] = ''; }
 
         $sections = [
             'Modules'      => ['module'],
@@ -493,7 +500,7 @@ class DocGenerator {
         $lines[] = '';
 
         $docs = $this->resolveDocLinks($module['docs'] ?? '', $module['links'] ?? []);
-        if ($docs) { $lines[] = $docs; $lines[] = ''; }
+        if ($docs) { $lines[] = $this->asBlockQuote($docs); $lines[] = ''; }
 
         // Collect children by category (following re-exports)
         $subModules = [];
@@ -603,7 +610,7 @@ class DocGenerator {
 
         // Full docs
         $docs = $this->resolveDocLinks($item['docs'] ?? '', $item['links'] ?? []);
-        if ($docs) { $lines[] = $docs; $lines[] = ''; }
+        if ($docs) { $lines[] = $this->asBlockQuote($docs); $lines[] = ''; }
 
         // Type-specific details
         if ($type === 'struct') $this->renderStructDetails($item, $lines);
