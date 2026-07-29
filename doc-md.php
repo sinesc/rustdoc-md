@@ -191,7 +191,7 @@ class DocGenerator {
             $result = [];
             for ($i = 0; $i < count($lines); $i++) {
                 $line = $lines[$i];
-                // Skip lines starting with # (but not the opening/closing ```) 
+                // Skip lines starting with # (but not the opening/closing ```)
                 if ($i > 0 && $i < count($lines) - 1 && preg_match("/^\s*#/", $line)) {
                     continue;
                 }
@@ -1060,19 +1060,23 @@ class DocGenerator {
 // ---------------------------------------------------------------------------
 
 function main(): void {
-    $rootDir = dirname(__FILE__);
+    $rootDir = getcwd();
     $targetDir = $rootDir . '/target';
 
     // Detect crate name from Cargo.toml
     $crateName = 'crate';
     $cargoToml = $rootDir . '/Cargo.toml';
-    if (file_exists($cargoToml)) {
-        $lines = file($cargoToml);
-        foreach ($lines as $line) {
-            if (preg_match('/^name\s*=\s*"([^"]+)"/', $line, $m)) {
-                $crateName = $m[1];
-                break;
-            }
+
+    if (!file_exists($cargoToml)) {
+        fwrite(STDERR, "Error: cargo toml file found at $cargoToml\n");
+        exit(1);
+    }
+
+    $lines = file($cargoToml);
+    foreach ($lines as $line) {
+        if (preg_match('/^name\s*=\s*"([^"]+)"/', $line, $m)) {
+            $crateName = $m[1];
+            break;
         }
     }
 
