@@ -1222,6 +1222,13 @@ function main(): void {
     }
 
     if (is_dir($outDir)) {
+        $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($outDir));
+        foreach ($files as $file) {
+            if ($file->isFile() && pathinfo($file->getPathname(), PATHINFO_EXTENSION) !== 'md') {
+                fwrite(STDERR, "Error: output directory '$outDir' contains non-.md entries. Aborting to prevent data loss.\n");
+                exit(1);
+            }
+        }
         exec("rm -rf " . escapeshellarg($outDir));
     }
     mkdir($outDir, 0755, true);
