@@ -54,13 +54,15 @@ class DocGenerator {
     private array $itemPaths = [];     // id -> absolute .md path (from crate root)
     private array $generatedItems = []; // id -> bool (track generated pages)
     private string $currentPath = '';  // current module path during rendering
+    private bool $quoteDescriptions = true;
 
-    public function __construct(array $data, string $outDir, string $crateName) {
+    public function __construct(array $data, string $outDir, string $crateName, bool $quoteDescriptions = true) {
         $this->index = $data['index'];
         $this->rootId = (int)($data['root'] ?? 0);
         $this->crateName = $crateName ?? 'unknown';
         $this->crateVersion = $data['crate_version'] ?? 'unknown';
         $this->outDir = $outDir;
+        $this->quoteDescriptions = $quoteDescriptions;
     }
 
     // ---- File I/O ----
@@ -154,6 +156,7 @@ class DocGenerator {
      * Wrap doc lines as a block quote (prefix each line with "> ").
      */
     private function asBlockQuote(string $docs): string {
+        if (!$this->quoteDescriptions) return $docs;
         return preg_replace('/^/m', '> ', $docs);
     }
 
@@ -1134,6 +1137,38 @@ class DocGenerator {
 // ---------------------------------------------------------------------------
 
 function main(): void {
+    // Parse command-line options
+    $quoteDescriptions = true;
+    $outputDir = null;
+    $args = $_SERVER['argv'] ?? [];
+    $i = 1; // skip script name
+    while ($i < count($args)) {
+        switch ($args[$i]) {
+            case '--help':
+                echo "Usage: php doc-md.php [options]\n\n";
+                echo "Options:\n";
+                echo "  --help                        Show this help message\n";
+                echo "  --no-quote-descriptions       Do not wrap descriptions in block quotes\n";
+                echo "  --output <path>               Output directory (default: target/doc-md/)\n";
+                exit(0);
+            case '--output':
+                $i++;
+                if ($i >= count($args)) {
+                    fwrite(STDERR, "Error: --output requires a path argument\n");
+                    exit(1);
+                }
+                $outputDir = $args[$i];
+                break;
+            case '--no-quote-descriptions':
+                $quoteDescriptions = false;
+                break;
+            default:
+                fwrite(STDERR, "Error: unknown option '{$args[$i]}'\n");
+                exit(1);
+        }
+        $i++;
+    }
+
     $rootDir = getcwd();
     $targetDir = $rootDir . '/target';
 
@@ -1155,7 +1190,7 @@ function main(): void {
     }
 
     $jsonFile = $targetDir . '/doc/' . $crateName . '.json';
-    $outDir = $targetDir . '/doc-md';
+    $outDir = $outputDir ?? ($targetDir . '/doc-md');
 
     echo "=== doc-md.php: Generate Markdown docs from rustdoc JSON ===\n\n";
 
@@ -1191,7 +1226,7 @@ function main(): void {
     }
     mkdir($outDir, 0755, true);
 
-    $gen = new DocGenerator($data, $outDir, $crateName, $crateName);
+    $gen = new DocGenerator($data, $outDir, $crateName, $quoteDescriptions);
     $gen->generate();
 }
 
