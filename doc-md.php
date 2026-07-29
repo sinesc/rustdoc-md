@@ -980,29 +980,87 @@ class DocGenerator {
         $trait = $item['inner']['trait'] ?? [];
         $traitItems = $trait['items'] ?? [];
 
-        if ($traitItems) {
-            $lines[] = '## Associated Items';
-            $lines[] = '';
-            foreach ($traitItems as $itemId) {
-                $assoc = $this->index[(string)$itemId] ?? null;
-                if (!$assoc) continue;
-                $atype = $this->getItemType($assoc);
-                $aname = $assoc['name'] ?? 'unnamed';
-                $docs = $this->resolveDocLinks($assoc['docs'] ?? '', $assoc['links'] ?? []);
+        if (!$traitItems) return;
 
-                if ($atype === 'function') {
-                    $this->renderMethodDetails($assoc, $lines);
-                } else {
-                    $prefix = match ($atype) {
-                        'assoc_const' => 'const',
-                        'assoc_type'  => 'type',
-                        default       => '?',
-                    };
-                    $lines[] = "### `$prefix $aname`";
-                    $lines[] = '';
-                    if ($docs) { $lines[] = $docs; $lines[] = ''; }
-                }
+        // Separate into four groups: required/provided methods, required/provided associated types
+        $requiredMethods = [];
+        $providedMethods = [];
+        $requiredTypes = [];
+        $providedTypes = [];
+        $requiredConsts = [];
+        $providedConsts = [];
+        foreach ($traitItems as $itemId) {
+            $assoc = $this->index[(string)$itemId] ?? null;
+            if (!$assoc) continue;
+            $atype = $this->getItemType($assoc);
+            if ($atype === 'function') {
+                $hasBody = ($assoc['inner']['function']['has_body'] ?? false);
+                if ($hasBody) $providedMethods[] = $assoc;
+                else $requiredMethods[] = $assoc;
+            } elseif ($atype === 'assoc_type') {
+                $hasDefault = ($assoc['inner']['assoc_type']['type'] ?? null) !== null;
+                if ($hasDefault) $providedTypes[] = $assoc;
+                else $requiredTypes[] = $assoc;
+            } elseif ($atype === 'assoc_const') {
+                $hasDefault = ($assoc['inner']['assoc_const']['value'] ?? null) !== null;
+                if ($hasDefault) $providedConsts[] = $assoc;
+                else $requiredConsts[] = $assoc;
             }
+        }
+
+        if ($requiredMethods) {
+            $lines[] = '## Required Methods';
+            $lines[] = '';
+            foreach ($requiredMethods as $assoc) $this->renderTraitItem($assoc, $lines);
+        }
+
+        if ($providedMethods) {
+            $lines[] = '## Provided Methods';
+            $lines[] = '';
+            foreach ($providedMethods as $assoc) $this->renderTraitItem($assoc, $lines);
+        }
+
+        if ($requiredTypes) {
+            $lines[] = '## Required Associated Types';
+            $lines[] = '';
+            foreach ($requiredTypes as $assoc) $this->renderTraitItem($assoc, $lines);
+        }
+
+        if ($providedTypes) {
+            $lines[] = '## Provided Associated Types';
+            $lines[] = '';
+            foreach ($providedTypes as $assoc) $this->renderTraitItem($assoc, $lines);
+        }
+
+        if ($requiredConsts) {
+            $lines[] = '## Required Associated Constants';
+            $lines[] = '';
+            foreach ($requiredConsts as $assoc) $this->renderTraitItem($assoc, $lines);
+        }
+
+        if ($providedConsts) {
+            $lines[] = '## Provided Associated Constants';
+            $lines[] = '';
+            foreach ($providedConsts as $assoc) $this->renderTraitItem($assoc, $lines);
+        }
+    }
+
+    private function renderTraitItem(array $assoc, array &$lines): void {
+        $atype = $this->getItemType($assoc);
+        $aname = $assoc['name'] ?? 'unnamed';
+        $docs = $this->resolveDocLinks($assoc['docs'] ?? '', $assoc['links'] ?? []);
+
+        if ($atype === 'function') {
+            $this->renderMethodDetails($assoc, $lines);
+        } else {
+            $prefix = match ($atype) {
+                'assoc_const' => 'const',
+                'assoc_type'  => 'type',
+                default       => '?',
+            };
+            $lines[] = "### `$prefix $aname`";
+            $lines[] = '';
+            if ($docs) { $lines[] = $docs; $lines[] = ''; }
         }
     }
 
