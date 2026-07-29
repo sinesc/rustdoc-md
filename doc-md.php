@@ -150,8 +150,17 @@ class DocGenerator {
         return str_repeat('../', $up) . $down;
     }
 
+    /**
+     * Shift markdown headings down by 3 levels so doc-comment headings nest under item headings.
+     * e.g. `# Error` -> `### Error`, `## Examples` -> `##### Examples`.
+     */
+    private function shiftHeadings(string $docs): string {
+        return preg_replace('/^([#]{1,6})\s/m', '###$1 ', $docs);
+    }
+
     private function resolveDocLinks(string $docs, array $links): string {
         $docs = $this->hideBoilerplate($docs);
+        $docs = $this->shiftHeadings($docs);
         if (empty($links)) return $docs;
         foreach ($links as $label => $id) {
             $link = $this->idToLink((int)$id);
