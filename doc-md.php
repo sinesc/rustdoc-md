@@ -762,7 +762,9 @@ class DocGenerator {
                 $this->renderImplHeader($structName, $implBlock['generics'], $lines);
                 $implDocs = $this->resolveDocLinks($implBlock['docs'], $implBlock['links'], 3);
                 if ($implDocs) { $lines[] = $implDocs; $lines[] = ''; }
-                foreach ($implBlock['methods'] as $item) {
+                $sorted = $implBlock['methods'];
+                usort($sorted, fn($a, $b) => ($a['name'] ?? '') <=> ($b['name'] ?? ''));
+                foreach ($sorted as $item) {
                     $itype = $this->getItemType($item);
                     if ($itype === 'function') {
                         $this->renderMethodDetails($item, $lines);
@@ -1011,6 +1013,7 @@ class DocGenerator {
         if ($intrinsicMethods) {
             $lines[] = '## Implementations';
             $lines[] = '';
+            usort($intrinsicMethods, fn($a, $b) => ($a['name'] ?? '') <=> ($b['name'] ?? ''));
             foreach ($intrinsicMethods as $method) {
                 $this->renderMethodDetails($method, $lines);
             }
