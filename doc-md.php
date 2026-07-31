@@ -745,6 +745,8 @@ class DocGenerator {
                     $intrinsicImpls[] = [
                         'generics' => $generics,
                         'methods' => $methods,
+                        'docs' => $impl['docs'] ?? '',
+                        'links' => $impl['links'] ?? [],
                     ];
                 }
             }
@@ -752,12 +754,19 @@ class DocGenerator {
 
         // Intrinsic methods grouped by impl block
         if ($intrinsicImpls) {
-            $lines[] = '## Methods';
+            $lines[] = '## Implementations';
             $lines[] = '';
             foreach ($intrinsicImpls as $implBlock) {
                 $this->renderImplHeader($structName, $implBlock['generics'], $lines);
-                foreach ($implBlock['methods'] as $method) {
-                    $this->renderMethodDetails($method, $lines);
+                $implDocs = $this->resolveDocLinks($implBlock['docs'], $implBlock['links'], 3);
+                if ($implDocs) { $lines[] = $implDocs; $lines[] = ''; }
+                foreach ($implBlock['methods'] as $item) {
+                    $itype = $this->getItemType($item);
+                    if ($itype === 'function') {
+                        $this->renderMethodDetails($item, $lines);
+                    } elseif ($itype === 'assoc_const') {
+                        $this->renderConstDetails($item, $lines);
+                    }
                 }
             }
         }
@@ -838,6 +847,22 @@ class DocGenerator {
 
         // Docs
         $docs = $this->resolveDocLinks($method['docs'] ?? '', $method['links'] ?? [], 3);
+        if ($docs) { $lines[] = $docs; $lines[] = ''; }
+    }
+
+    // ---- Constant details ----
+
+    private function renderConstDetails(array $const, array &$lines): void {
+        $name = $const['name'] ?? 'unnamed';
+        $cdata = $const['inner']['assoc_const'] ?? [];
+        $ctype = $this->renderTypeName($cdata['type'] ?? null);
+
+        $opt_value = isset($cdata['value']) ? "= {$cdata['value']}" : "";
+        $lines[] = "### `const $name: $ctype $opt_value`";
+        $lines[] = '';
+
+        // Docs
+        $docs = $this->resolveDocLinks($const['docs'] ?? '', $const['links'] ?? [], 3);
         if ($docs) { $lines[] = $docs; $lines[] = ''; }
     }
 
@@ -976,7 +1001,7 @@ class DocGenerator {
         }
 
         if ($intrinsicMethods) {
-            $lines[] = '## Methods';
+            $lines[] = '## Implementations';
             $lines[] = '';
             foreach ($intrinsicMethods as $method) {
                 $this->renderMethodDetails($method, $lines);
