@@ -55,14 +55,16 @@ class DocGenerator {
     private array $generatedItems = []; // id -> bool (track generated pages)
     private string $currentPath = '';  // current module path during rendering
     private bool $quoteDescriptions = true;
+    private bool $signatureBlocks = true;
 
-    public function __construct(array $data, string $outDir, string $crateName, bool $quoteDescriptions = true) {
+    public function __construct(array $data, string $outDir, string $crateName, bool $quoteDescriptions = true, bool $signatureBlocks = true) {
         $this->index = $data['index'];
         $this->rootId = (int)($data['root'] ?? 0);
         $this->crateName = $crateName ?? 'unknown';
         $this->crateVersion = $data['crate_version'] ?? 'unknown';
         $this->outDir = $outDir;
         $this->quoteDescriptions = $quoteDescriptions;
+        $this->signatureBlocks = $signatureBlocks;
     }
 
     // ---- File I/O ----
@@ -805,7 +807,8 @@ class DocGenerator {
             }
         }
 
-        $lines[] = '```';
+        $lines[] = '### Block';
+        $lines[] = '```rust';
         $lines[] = $header;
         if ($whereLines) {
             $lines[] = 'where';
@@ -838,11 +841,16 @@ class DocGenerator {
         $ret = $this->renderTypeName($sig['output'] ?? null);
 
         // Signature line
-        $sigLine = "### `fn $name(" . implode(', ', $params) . ")`";
-        if ($ret !== '()') {
-            $sigLine = "### `fn $name(" . implode(', ', $params) . ") -> $ret`";
+        $sigLine = "fn $name(" . implode(', ', $params) . ")";
+        if ($ret !== '()') $sigLine .= " -> $ret";
+
+        if ($this->signatureBlocks) {
+            $lines[] = '```rust';
+            $lines[] = $sigLine;
+            $lines[] = '```';
+        } else {
+            $lines[] = "#### `$sigLine`";
         }
-        $lines[] = $sigLine;
         $lines[] = '';
 
         // Docs
@@ -858,7 +866,7 @@ class DocGenerator {
         $ctype = $this->renderTypeName($cdata['type'] ?? null);
 
         $opt_value = isset($cdata['value']) ? "= {$cdata['value']}" : "";
-        $lines[] = "### `const $name: $ctype $opt_value`";
+        $lines[] = "#### `const $name: $ctype $opt_value`";
         $lines[] = '';
 
         // Docs
@@ -1201,7 +1209,7 @@ class DocGenerator {
         if ($genParams) $sigLine = "fn $name<" . implode(', ', $genParams) . ">(" . implode(', ', $params) . ")";
         if ($ret !== '()') $sigLine .= " -> $ret";
 
-        $lines[] = '```';
+        $lines[] = '```rust';
         $lines[] = $sigLine;
         if ($whereLines) {
             $lines[] = 'where';
@@ -1221,6 +1229,7 @@ class DocGenerator {
 function main(): void {
     // Parse command-line options
     $quoteDescriptions = true;
+    $signatureBlocks = true;
     $outputDir = null;
     $args = $_SERVER['argv'] ?? [];
     $i = 1; // skip script name
@@ -1231,6 +1240,7 @@ function main(): void {
                 echo "Options:\n";
                 echo "  --help                        Show this help message\n";
                 echo "  --no-quote-descriptions       Do not wrap descriptions in block quotes\n";
+                echo "  --no-signature-blocks         Render signatures inline instead of code blocks\n";
                 echo "  --output <path>               Output directory (default: target/doc-md/)\n";
                 exit(0);
             case '--output':
@@ -1243,6 +1253,9 @@ function main(): void {
                 break;
             case '--no-quote-descriptions':
                 $quoteDescriptions = false;
+                break;
+            case '--no-signature-blocks':
+                $signatureBlocks = false;
                 break;
             default:
                 fwrite(STDERR, "Error: unknown option '{$args[$i]}'\n");
@@ -1315,7 +1328,7 @@ function main(): void {
     }
     mkdir($outDir, 0755, true);
 
-    $gen = new DocGenerator($data, $outDir, $crateName, $quoteDescriptions);
+    $gen = new DocGenerator($data, $outDir, $crateName, $quoteDescriptions, $signatureBlocks);
     $gen->generate();
 }
 
