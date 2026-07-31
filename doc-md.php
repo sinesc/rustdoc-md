@@ -1087,6 +1087,19 @@ class DocGenerator {
             $lines[] = '';
             foreach ($providedConsts as $assoc) $this->renderTraitItem($assoc, $lines);
         }
+
+        // Implementors
+        $implementors = $this->findTraitImplementors((int)$item['id']);
+        if ($implementors) {
+            $lines[] = '## Implementors';
+            $lines[] = '';
+            foreach ($implementors as $impl) {
+                $link = $this->idToLink((int)$impl['id']);
+                $implName = $impl['name'] ?? 'unnamed';
+                $lines[] = "- [$implName]($link)";
+            }
+            $lines[] = '';
+        }
     }
 
     private function renderTraitItem(array $assoc, array &$lines): void {
@@ -1106,6 +1119,39 @@ class DocGenerator {
             $lines[] = '';
             if ($docs) { $lines[] = $docs; $lines[] = ''; }
         }
+    }
+
+    /**
+     * Find all public types that implement a given trait.
+     */
+    private function findTraitImplementors(int $traitId): array {
+        $implementors = [];
+        foreach ($this->index as $id => $item) {
+            $type = $this->getItemType($item);
+            if (!in_array($type, ['struct', 'enum'], true)) continue;
+            if (!$this->isPublic($item)) continue;
+
+            $impls = ($type === 'struct')
+                ? ($item['inner']['struct']['impls'] ?? [])
+                : ($item['inner']['enum']['impls'] ?? []);
+            if (!is_array($impls)) continue;
+
+            foreach ($impls as $implId) {
+                $impl = $this->index[(string)$implId] ?? null;
+                if (!$impl) continue;
+                $implData = $impl['inner']['impl'] ?? [];
+                $trait = $implData['trait'] ?? null;
+                if ($trait) {
+                    $tid = is_array($trait) ? ($trait['id'] ?? null) : $trait;
+                    if ((int)$tid === $traitId) {
+                        $implementors[] = $item;
+                        break;
+                    }
+                }
+            }
+        }
+        usort($implementors, fn($a, $b) => ($a['name'] ?? '') <=> ($b['name'] ?? ''));
+        return $implementors;
     }
 
     // ---- Function details ----
