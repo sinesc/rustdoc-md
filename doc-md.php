@@ -906,8 +906,9 @@ class DocGenerator {
         }
         if (isset($ty['borrowed_ref'])) {
             $br = $ty['borrowed_ref'];
+            $lifetime = $br['lifetime'] ?? '';
             $mut = ($br['is_mutable'] ?? false) ? 'mut ' : '';
-            return "&$mut" . $this->renderTypeName($br['type'] ?? null);
+            return "&$lifetime$mut" . ($lifetime ? ' ' : '') . $this->renderTypeName($br['type'] ?? null);
         }
         if (isset($ty['mutable_ref'])) {
             return '&mut ' . $this->renderTypeName($ty['mutable_ref']['type'] ?? null);
@@ -973,8 +974,42 @@ class DocGenerator {
                 $var = $this->index[(string)$varId] ?? null;
                 if (!$var) continue;
                 $vname = $var['name'] ?? 'unnamed';
+                $vkind = $var['inner']['variant']['kind'] ?? 'plain';
                 $vdocs = $this->resolveDocLinks($var['docs'] ?? '', $var['links'] ?? [], 3);
-                $lines[] = "### `$vname`";
+
+                // Build variant signature
+                if (is_array($vkind) && isset($vkind['struct'])) {
+                    $fields = [];
+                    foreach ($vkind['struct']['fields'] ?? [] as $fid) {
+                        $field = $this->index[(string)$fid] ?? null;
+                        if ($field) {
+                            $fname = $field['name'] ?? '_';
+                            $ftype = $this->renderTypeName($field['inner']['struct_field'] ?? null);
+                            $fields[] = "$fname: $ftype";
+                        }
+                    }
+                    $sig = $fields ? "$vname { " . implode(', ', $fields) . " }" : "$vname { }";
+                } elseif (is_array($vkind) && isset($vkind['tuple'])) {
+                    $fields = [];
+                    foreach ($vkind['tuple'] as $fid) {
+                        $field = $this->index[(string)$fid] ?? null;
+                        if ($field) {
+                            $ftype = $this->renderTypeName($field['inner']['struct_field'] ?? null);
+                            $fields[] = $ftype;
+                        }
+                    }
+                    $sig = "$vname(" . implode(', ', $fields) . ")";
+                } else {
+                    $sig = $vname;
+                }
+
+                if ($this->signatureBlocks) {
+                    $lines[] = '```rust';
+                    $lines[] = $sig;
+                    $lines[] = '```';
+                } else {
+                    $lines[] = "### `$sig`";
+                }
                 $lines[] = '';
                 if ($vdocs) { $lines[] = $vdocs; $lines[] = ''; }
             }
