@@ -1172,31 +1172,42 @@ class DocGenerator {
         // Return type
         $ret = $this->renderTypeName($sig['output'] ?? null);
 
-        // Where clause
+        // Generics
         $generics = $item['generics'] ?? null;
         if (!$generics) $generics = ($func['generics'] ?? null);
-        $whereClause = '';
-        if ($generics && !empty($generics['where_predicates'])) {
-            $wheres = [];
+        $genParams = [];
+        if (!empty($generics['params'])) {
+            $genParams = array_map(fn($p) => $p['name'] ?? '?', $generics['params']);
+        }
+
+        // Where predicates
+        $whereLines = [];
+        if (!empty($generics['where_predicates'])) {
             foreach ($generics['where_predicates'] as $pred) {
                 $bp = $pred['bound_predicate'] ?? null;
                 if ($bp) {
                     $typeName = $this->renderTypeName($bp['type'] ?? null);
                     $bounds = array_map(fn($b) => $this->renderTraitBound($b), $bp['bounds'] ?? []);
                     if ($bounds) {
-                        $wheres[] = "$typeName: " . implode(' + ', $bounds);
+                        $whereLines[] = "    $typeName: " . implode(' + ', $bounds);
                     }
                 }
             }
-            if ($wheres) $whereClause = " where " . implode(', ', $wheres);
         }
 
-        // Signature line
+        // Build signature line
         $name = $item['name'] ?? 'unnamed';
-        $inner = "fn $name(" . implode(', ', $params) . ")";
-        if ($ret !== '()') $inner .= " -> $ret";
-        if ($whereClause) $inner .= $whereClause;
-        $lines[] = "`$inner`";
+        $sigLine = "fn $name(" . implode(', ', $params) . ")";
+        if ($genParams) $sigLine = "fn $name<" . implode(', ', $genParams) . ">(" . implode(', ', $params) . ")";
+        if ($ret !== '()') $sigLine .= " -> $ret";
+
+        $lines[] = '```';
+        $lines[] = $sigLine;
+        if ($whereLines) {
+            $lines[] = 'where';
+            foreach ($whereLines as $w) $lines[] = $w;
+        }
+        $lines[] = '```';
         $lines[] = '';
     }
 
