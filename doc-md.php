@@ -704,7 +704,15 @@ class DocGenerator {
                 $fname = $field['name'] ?? 'unnamed';
                 $ftype = $this->renderTypeName($field['inner']['struct_field'] ?? null);
                 $fdocs = $this->resolveDocLinks($field['docs'] ?? '', $field['links'] ?? [], 3);
-                $lines[] = "### `$fname: $ftype`";
+                $sig = "$fname: $ftype";
+
+                if ($this->signatureBlocks) {
+                    $lines[] = '```rust';
+                    $lines[] = $sig;
+                    $lines[] = '```';
+                } else {
+                    $lines[] = "### `$sig`";
+                }
                 $lines[] = '';
                 if ($fdocs) { $lines[] = $fdocs; $lines[] = ''; }
             }
