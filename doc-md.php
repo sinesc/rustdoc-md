@@ -994,9 +994,14 @@ class DocGenerator {
         if ($variants) {
             $lines[] = '## Variants';
             $lines[] = '';
+            $variantItems = [];
             foreach ($variants as $varId) {
                 $var = $this->index[(string)$varId] ?? null;
                 if (!$var) continue;
+                $variantItems[] = $var;
+            }
+            usort($variantItems, fn($a, $b) => ($a['name'] ?? '') <=> ($b['name'] ?? ''));
+            foreach ($variantItems as $var) {
                 $vname = $var['name'] ?? 'unnamed';
                 $vkind = $var['inner']['variant']['kind'] ?? 'plain';
                 $vdocs = $this->resolveDocLinks($var['docs'] ?? '', $var['links'] ?? [], 3);
