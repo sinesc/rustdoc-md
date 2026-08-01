@@ -1259,6 +1259,7 @@ function main(): void {
                 echo "Usage: doc-md.php [options]\n\n";
                 echo "Options:\n";
                 echo "  --help                        Show this help message\n";
+                echo "  --minimal                     Enable all --no-* options\n";
                 echo "  --no-quote-descriptions       Do not wrap descriptions in block quotes\n";
                 echo "  --no-signature-blocks         Render signatures inline instead of code blocks\n";
                 echo "  --output <path>               Output directory (default: target/doc-md/)\n";
@@ -1270,6 +1271,10 @@ function main(): void {
                     exit(1);
                 }
                 $outputDir = $args[$i];
+                break;
+            case '--minimal':
+                $quoteDescriptions = false;
+                $signatureBlocks = false;
                 break;
             case '--no-quote-descriptions':
                 $quoteDescriptions = false;
