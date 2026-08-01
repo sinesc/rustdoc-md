@@ -86,6 +86,79 @@ class DocGenerator {
         return ($item['visibility'] ?? '') === 'public';
     }
 
+    /**
+     * Render an item title string, e.g. "Struct `Foo<T>`".
+     */
+    private function renderTitle(array $item, string $type): string {
+        $name = $this->getItemName($item, $type);
+        $label = match ($type) {
+            'struct'     => 'Struct',
+            'enum'       => 'Enum',
+            'trait'      => 'Trait',
+            'function'   => 'Function',
+            'macro'      => 'Macro',
+            'constant'   => 'Constant',
+            'type_alias' => 'Type Alias',
+            'use'        => 'Use',
+            default      => ucfirst($type),
+        };
+        // Append generics if present
+        $generics = $item['generics'] ?? null;
+        if (!$generics) {
+            $inner = $item['inner'] ?? [];
+            $generics = ($inner[$type] ?? [])['generics'] ?? null;
+        }
+        $genPart = '';
+        if ($generics && !empty($generics['params'])) {
+            $params = array_filter($generics['params'], fn($p) => !($p['kind']['type']['is_synthetic'] ?? false));
+            $names = array_map(fn($p) => $p['name'] ?? '?', $params);
+            if ($names) $genPart = '<' . implode(', ', $names) . '>';
+        }
+        return "$label `$name$genPart`";
+    }
+
+    /**
+     * Extract generic parameter names from a generics dict.
+     */
+    private function getGenericParamNames(array $generics): array {
+        if (empty($generics['params'])) return [];
+        return array_map(fn($p) => $p['name'] ?? '?', $generics['params']);
+    }
+
+    /**
+     * Append a signature line as code block or heading.
+     */
+    private function appendSignature(array &$lines, string $sig, int $headingLevel = 3): void {
+        $prefix = str_repeat('#', $headingLevel);
+        if ($this->signatureBlocks) {
+            $lines[] = '```rust';
+            $lines[] = $sig;
+            $lines[] = '```';
+        } else {
+            $lines[] = "$prefix `$sig`";
+        }
+    }
+
+    /**
+     * Extract where-clause lines from a generics dict.
+     */
+    private function getWhereLines(array $generics): array {
+        $whereLines = [];
+        if (!empty($generics['where_predicates'])) {
+            foreach ($generics['where_predicates'] as $pred) {
+                $bp = $pred['bound_predicate'] ?? null;
+                if ($bp) {
+                    $typeName = $this->renderTypeName($bp['type'] ?? null);
+                    $bounds = array_map(fn($b) => $this->renderTraitBound($b), $bp['bounds'] ?? []);
+                    if ($bounds) {
+                        $whereLines[] = "    $typeName: " . implode(' + ', $bounds);
+                    }
+                }
+            }
+        }
+        return $whereLines;
+    }
+
     private function getItemName(array $item, string $type): string {
         $name = $item['name'] ?? null;
         if ($name) return $name;
@@ -605,9 +678,9 @@ class DocGenerator {
         $lines[] = '';
 
         // Title
-        $sig = $this->renderSignature($item, $type);
         $depr = $item['deprecation'] ? ' >~~Deprecated~~<' : '';
-        $lines[] = "# `$sig`$depr";
+        $title = $this->renderTitle($item, $type);
+        $lines[] = "# $title$depr";
         $lines[] = '';
 
         // Function signature goes before docs
@@ -629,11 +702,10 @@ class DocGenerator {
 
     private function appendDetail(array $item, array &$lines): void {
         $type = $this->getItemType($item);
-        $name = $this->getItemName($item, $type);
 
-        $sig = $this->renderSignature($item, $type);
         $depr = $item['deprecation'] ? ' >~~Deprecated~~<' : '';
-        $lines[] = "### `$sig`$depr";
+        $title = $this->renderTitle($item, $type);
+        $lines[] = "### $title$depr";
         $lines[] = '';
 
         $docs = $this->resolveDocLinks($item['docs'] ?? '', $item['links'] ?? []);
@@ -646,33 +718,6 @@ class DocGenerator {
     }
 
     // ---- Signature rendering ----
-
-    private function renderSignature(array $item, string $type): string {
-        $name = $this->getItemName($item, $type);
-        $sig = match ($type) {
-            'struct'     => "struct $name",
-            'enum'       => "enum $name",
-            'trait'      => "trait $name",
-            'function'   => "fn $name",
-            'macro'      => "macro $name",
-            'constant'   => "const $name",
-            'type_alias' => "type $name",
-            'use'        => "use $name",
-            default      => $name,
-        };
-        // Append generics if present
-        $generics = $item['generics'] ?? null;
-        if (!$generics) {
-            $inner = $item['inner'] ?? [];
-            $generics = ($inner[$type] ?? [])['generics'] ?? null;
-        }
-        if ($generics && !empty($generics['params'])) {
-            $params = array_filter(array_map(fn($p) => $p, $generics['params']), fn($p) => !($p['kind']['type']['is_synthetic'] ?? false));
-            $names = array_map(fn($p) => $p['name'] ?? '?', $params);
-            if ($names) $sig .= '<' . implode(', ', $names) . '>';
-        }
-        return $sig;
-    }
 
     private function renderTraitBound(array $bound): string {
         $tb = $bound['trait_bound'] ?? null;
@@ -706,13 +751,7 @@ class DocGenerator {
                 $fdocs = $this->resolveDocLinks($field['docs'] ?? '', $field['links'] ?? [], 3);
                 $sig = "$fname: $ftype";
 
-                if ($this->signatureBlocks) {
-                    $lines[] = '```rust';
-                    $lines[] = $sig;
-                    $lines[] = '```';
-                } else {
-                    $lines[] = "### `$sig`";
-                }
+                $this->appendSignature($lines, $sig);
                 $lines[] = '';
                 if ($fdocs) { $lines[] = $fdocs; $lines[] = ''; }
             }
@@ -796,26 +835,11 @@ class DocGenerator {
 
     private function renderImplHeader(string $structName, array $generics, array &$lines): void {
         $header = "impl";
-        $params = [];
-        if (!empty($generics['params'])) {
-            $params = array_map(fn($p) => $p['name'] ?? '?', $generics['params']);
-        }
+        $params = $this->getGenericParamNames($generics);
         if ($params) $header .= '<' . implode(', ', $params) . '>';
         $header .= " $structName";
 
-        $whereLines = [];
-        if (!empty($generics['where_predicates'])) {
-            foreach ($generics['where_predicates'] as $pred) {
-                $bp = $pred['bound_predicate'] ?? null;
-                if ($bp) {
-                    $typeName = $this->renderTypeName($bp['type'] ?? null);
-                    $bounds = array_map(fn($b) => $this->renderTraitBound($b), $bp['bounds'] ?? []);
-                    if ($bounds) {
-                        $whereLines[] = "    $typeName: " . implode(' + ', $bounds);
-                    }
-                }
-            }
-        }
+        $whereLines = $this->getWhereLines($generics);
 
         $lines[] = '### Block';
         $lines[] = '```rust';
@@ -854,13 +878,7 @@ class DocGenerator {
         $sigLine = "fn $name(" . implode(', ', $params) . ")";
         if ($ret !== '()') $sigLine .= " -> $ret";
 
-        if ($this->signatureBlocks) {
-            $lines[] = '```rust';
-            $lines[] = $sigLine;
-            $lines[] = '```';
-        } else {
-            $lines[] = "#### `$sigLine`";
-        }
+        $this->appendSignature($lines, $sigLine, 4);
         $lines[] = '';
 
         // Docs
@@ -1011,13 +1029,7 @@ class DocGenerator {
                     $sig = $vname;
                 }
 
-                if ($this->signatureBlocks) {
-                    $lines[] = '```rust';
-                    $lines[] = $sig;
-                    $lines[] = '```';
-                } else {
-                    $lines[] = "### `$sig`";
-                }
+                $this->appendSignature($lines, $sig);
                 $lines[] = '';
                 if ($vdocs) { $lines[] = $vdocs; $lines[] = ''; }
             }
@@ -1106,40 +1118,19 @@ class DocGenerator {
             }
         }
 
-        if ($requiredMethods) {
-            $lines[] = '## Required Methods';
+        $sections = [
+            'Required Methods'             => $requiredMethods,
+            'Provided Methods'             => $providedMethods,
+            'Required Associated Types'    => $requiredTypes,
+            'Provided Associated Types'    => $providedTypes,
+            'Required Associated Constants' => $requiredConsts,
+            'Provided Associated Constants' => $providedConsts,
+        ];
+        foreach ($sections as $heading => $items) {
+            if (!$items) continue;
+            $lines[] = "## $heading";
             $lines[] = '';
-            foreach ($requiredMethods as $assoc) $this->renderTraitItem($assoc, $lines);
-        }
-
-        if ($providedMethods) {
-            $lines[] = '## Provided Methods';
-            $lines[] = '';
-            foreach ($providedMethods as $assoc) $this->renderTraitItem($assoc, $lines);
-        }
-
-        if ($requiredTypes) {
-            $lines[] = '## Required Associated Types';
-            $lines[] = '';
-            foreach ($requiredTypes as $assoc) $this->renderTraitItem($assoc, $lines);
-        }
-
-        if ($providedTypes) {
-            $lines[] = '## Provided Associated Types';
-            $lines[] = '';
-            foreach ($providedTypes as $assoc) $this->renderTraitItem($assoc, $lines);
-        }
-
-        if ($requiredConsts) {
-            $lines[] = '## Required Associated Constants';
-            $lines[] = '';
-            foreach ($requiredConsts as $assoc) $this->renderTraitItem($assoc, $lines);
-        }
-
-        if ($providedConsts) {
-            $lines[] = '## Provided Associated Constants';
-            $lines[] = '';
-            foreach ($providedConsts as $assoc) $this->renderTraitItem($assoc, $lines);
+            foreach ($items as $assoc) $this->renderTraitItem($assoc, $lines);
         }
 
         // Implementors
@@ -1229,25 +1220,10 @@ class DocGenerator {
         // Generics
         $generics = $item['generics'] ?? null;
         if (!$generics) $generics = ($func['generics'] ?? null);
-        $genParams = [];
-        if (!empty($generics['params'])) {
-            $genParams = array_map(fn($p) => $p['name'] ?? '?', $generics['params']);
-        }
+        $genParams = $this->getGenericParamNames($generics);
 
         // Where predicates
-        $whereLines = [];
-        if (!empty($generics['where_predicates'])) {
-            foreach ($generics['where_predicates'] as $pred) {
-                $bp = $pred['bound_predicate'] ?? null;
-                if ($bp) {
-                    $typeName = $this->renderTypeName($bp['type'] ?? null);
-                    $bounds = array_map(fn($b) => $this->renderTraitBound($b), $bp['bounds'] ?? []);
-                    if ($bounds) {
-                        $whereLines[] = "    $typeName: " . implode(' + ', $bounds);
-                    }
-                }
-            }
-        }
+        $whereLines = $this->getWhereLines($generics);
 
         // Build signature line
         $name = $item['name'] ?? 'unnamed';
@@ -1282,7 +1258,7 @@ function main(): void {
     while ($i < count($args)) {
         switch ($args[$i]) {
             case '--help':
-                echo "Usage: php doc-md.php [options]\n\n";
+                echo "Usage: doc-md.php [options]\n\n";
                 echo "Options:\n";
                 echo "  --help                        Show this help message\n";
                 echo "  --no-quote-descriptions       Do not wrap descriptions in block quotes\n";
