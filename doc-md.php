@@ -25,20 +25,20 @@ function cmd(string $cmd, bool $quiet = false): string {
 }
 
 function ensure_nightly(): void {
+    echo "Checking nightly toolchain... ";
     $out = cmd('rustup show active-toolchain');
-    if (preg_match('/nightly/', $out)) return;
+    if (preg_match('/nightly/', $out)) {
+        echo "Active.\n";
+        return;
+    }
     $list = cmd('rustup toolchain list');
     if (!preg_match('/nightly/', $list)) {
-        echo "Installing nightly toolchain...\n";
+        echo "\nInstalling nightly toolchain...";
         cmd('rustup install nightly');
+        echo "Done.\n";
+    } else {
+        echo "Available.\n";
     }
-}
-
-function get_default_toolchain(): string {
-    cmd('rustup default stable 2>/dev/null');
-    $out = cmd('rustup show active-toolchain');
-    preg_match('/^(.+?)\s/', $out, $m);
-    return $m[1] ?? 'stable';
 }
 
 // ---------------------------------------------------------------------------
@@ -406,9 +406,9 @@ class DocGenerator {
     // ---- Main entry point ----
 
     public function generate(): void {
-        echo "Generating markdown documentation...\n";
 
         $rootItem = $this->index[(string)$this->rootId] ?? null;
+
         if (!$rootItem) {
             fwrite(STDERR, "Could not find root module\n");
             exit(1);
@@ -426,8 +426,6 @@ class DocGenerator {
 
         // Generate module pages recursively (skip root — crate index already generated)
         $this->generateModuleChildren($rootItem, '');
-
-        echo "Done. Output in: {$this->outDir}/\n";
     }
 
     // ---- Crate index page ----
@@ -1309,22 +1307,11 @@ function main(): void {
     $jsonFile = $targetDir . '/doc/' . $crateName . '.json';
     $outDir = $outputDir ?? ($targetDir . '/doc-md');
 
-    echo "=== doc-md.php: Generate Markdown docs from rustdoc JSON ===\n\n";
-
-    echo "Checking nightly toolchain...\n";
     ensure_nightly();
 
-    $originalToolchain = get_default_toolchain();
-    echo "Original toolchain: $originalToolchain\n";
-    cmd('rustup default nightly');
-    echo "Switched to nightly.\n\n";
-
-    echo "Generating rustdoc JSON...\n";
-    cmd("cd $rootDir && cargo +nightly doc -Z unstable-options --output-format=json --no-deps 2>&1");
-    echo "Done.\n\n";
-
-    cmd("rustup default $originalToolchain");
-    echo "Switched back to: $originalToolchain\n\n";
+    echo "Generating rustdoc JSON... ";
+    cmd("cd $rootDir && rustup run nightly cargo doc -Z unstable-options --output-format=json --no-deps 2>&1");
+    echo "Done.\n";
 
     if (!file_exists($jsonFile)) {
         fwrite(STDERR, "Error: rustdoc JSON not found at $jsonFile\n");
@@ -1350,8 +1337,10 @@ function main(): void {
     }
     mkdir($outDir, 0755, true);
 
+    echo "Generating markdown documentation... ";
     $gen = new DocGenerator($data, $outDir, $crateName, $quoteDescriptions, $signatureBlocks);
     $gen->generate();
+    echo "Done.\nOutput in: {$outDir}/\n";
 }
 
 main();
